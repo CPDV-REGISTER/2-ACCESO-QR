@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Acceso Dual - Chile</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { 
+            background-image: linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.1)), url('FONDO 2.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            padding: 20px; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 102vh;
+        }
+
+        .form-container { 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 30px; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+        }
+
+         /* LOGO RESPONSIVO OPCIÓN 1 (Centrado y Adaptable) */
+        .logo-colegio {
+            width: 80%;          /* En móviles usa el 80% del ancho del contenedor */
+            max-width: 300px;    /* En PC no supera los 300px */
+            height: auto;
+            display: block;
+            margin: 0 auto 20px auto;
+        }
+        #reader { width: 100% !important; border-radius: 10px; overflow: hidden; display: none; margin-bottom: 20px; border: 2px solid #0d6efd !important; }
+        .scanner-input-group { background: #f8f9fa; border: 2px dashed #ced4da; padding: 15px; border-radius: 20px; margin-bottom: 20px}
+        #campoPatente { display: none; }
+        .form-select { white-space: normal !important; height: auto !important; min-height: 50px; }
+        .is-invalid { border-color: #dc3545 !important; }
+
+        /* Badge flotante para indicar el portal activo */
+        #badgePortal { 
+            position: fixed; 
+            top: 10px; 
+            right: 10px; 
+            z-index: 1001; 
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+
+<div id="badgePortal">
+    <span class="badge bg-dark p-2 border border-secondary shadow">
+        📍 <span id="nombrePortalActivo"></span> 
+        <button class="btn btn-sm btn-link text-info p-0 ms-2" onclick="cambiarPortal()" style="text-decoration: none; font-size: 0.8rem;">(Cambiar)</button>
+    </span>
+</div>
+
+<div class="container">
+    <div class="row justify-content-center">
+        
+        <div class="col-md-6 form-container" id="setupPortal">
+            <img src="LOGO-CPDV.png" alt="Logo Colegio" class="logo-colegio">
+            <h3 class="text-center mb-4">Configuración de Punto de Control</h3>
+            <p class="text-center text-muted">Seleccione su ubicación actual para registrar los ingresos correctamente.</p>
+            
+            <div class="mb-4">
+                <select id="selectorPortal" class="form-select form-select-lg">
+                    <option value="">-- Seleccione Punto de Control --</option>
+                    <option value="HALL GUARDIA">HALL CENTRAL-GUARDIA</option>
+                    <option value="HALL RECEPCIÓN">HALL CENTRAL-RECEPCIÓN</option>
+                    <option value="CH3">CH3 COSTADO ANFP</option>
+                    <option value="CH3 DIR">CH3 COSTADO ANFP INGRESO DIRECTO</option>
+                    <option value="CH2">CH2 MAR TIRRENO</option>
+		    <option value="10B">10B COSTADO DE GIMNASIO</option>
+                </select>
+            </div>
+            <button onclick="confirmarPortal()" class="btn btn-primary w-100 btn-lg">Iniciar Turno</button>
+        </div>
+
+        <div class="col-md-8 form-container" id="appGuardia" style="display: none;">
+            <img src="LOGO-CPDV.png" alt="Logo Colegio" class="logo-colegio">
+            <h2 class="text-center mb-4">Registro de Ingreso</h2>
+
+            <div class="text-center mb-3">
+                <button class="btn btn-primary w-100 mb-2" onclick="encenderCamara()">
+                    Usar Cámara del Dispositivo
+                </button>
+                <div id="reader"></div> 
+            </div>
+
+            <div class="scanner-input-group">
+                <div class="text-center mb-3">
+                    <label class="form-label"><strong>Lector de Carnet / QR</strong></label>
+                    <input type="text" id="inputScanner" class="form-control" placeholder="Haga clic aquí y escanee..." onkeypress="manejarEscaneoPistola(event)">
+                </div>
+            </div>
+
+            <form id="registroForm">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">RUN (Cédula)</label>
+                        <input type="text" id="run" class="form-control" placeholder="12345678-9" oninput="this.value = formatearRUT(this.value); revisarValidezRUT(this.value)" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Nombre Completo</label>
+                        <input type="text" id="nombreCompleto" class="form-control" required>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Tipo de Entrada</label>
+                        <select id="tipoEntrada" class="form-select" onchange="toggleVehiculo()">
+                            <option value="peatonal">Peatonal</option>
+                            <option value="vehicular">Vehicular</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3" id="campoPatente">
+                        <label class="form-label text-primary"><strong>Patente</strong></label>
+                        <input type="text" id="patente" class="form-control border-primary" placeholder="ABCD12">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label">Motivo de Ingreso</label>
+                        <select id="motivo" class="form-select" onchange="verificarMotivoEspecial()">
+                            <option value="">Seleccione una opción...</option>
+                            <option value="APODERADO-RETIRO ESTUDIANTE/ENFERMERÍA">Apoderado-Retiro Estudiante/Enfermería</option>
+                            <option value="APODERADO-ENTREGA DE ELEMENTOS">Apoderado-Entrega de elementos</option>
+                            <option value="APODERADO-SELECCIONES/TALLERES CPDV">Apoderado-Selecciones/Talleres CPDV</option>
+                            <option value="APODERADO-CITA ADMISIÓN/RECAUDACIÓN">Apoderado-Cita Admisión/recaudación</option>
+                            <option value="APODERADO-CITA DOCENTE">Apoderado-Cita docente</option>
+                            <option value="VISITA-ISP">Visita-ISP</option>
+                            <option value="VISITA-SCHOOL TOUR/ADMISIÓN/RECAUDACIÓN">Visita-School tour/Admisión/Recaudación</option>
+                            <option value="VISITA-ENTREVISTA">Visita-Entrevista</option>
+                            <option value="VISITA-PERSONAL DE APOYO (PSICOLOGÍA, TERAPIA OCUPACIONAL)">Visita-Personal de apoyo (Psicología, Terapia ocupacional)</option>
+                            <option value="VISITA-ARRIENDOS">Visita-Arriendos</option>
+                            <option value="VISITA-PROVEEDORES">Visita-Proveedores</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12 mb-3" id="contenedorExtra" style="display: none;">
+                        <label class="form-label" id="labelExtra">Detalle de Visita</label>
+                        <input type="text" id="detalleVisita" class="form-control" placeholder="">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-success w-100 btn-lg mt-3">Finalizar Registro</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- LÓGICA DE PERSISTENCIA Y PORTAL ---
+let portalActual = "";
+let html5QrCode;
+
+window.onload = function() {
+    const portalGuardado = localStorage.getItem('portal_seleccionado');
+    if (portalGuardado) {
+        mostrarApp(portalGuardado);
+    }
+};
+
+function confirmarPortal() {
+    const sel = document.getElementById('selectorPortal');
+    if (sel.value === "") return alert("Por favor seleccione un portal.");
+    
+    localStorage.setItem('portal_seleccionado', sel.value);
+    mostrarApp(sel.value);
+}
+
+function mostrarApp(nombrePortal) {
+    portalActual = nombrePortal;
+    document.getElementById('setupPortal').style.display = 'none';
+    document.getElementById('appGuardia').style.display = 'block';
+    document.getElementById('badgePortal').style.display = 'block';
+    document.getElementById('nombrePortalActivo').innerText = nombrePortal;
+}
+
+function cambiarPortal() {
+    if (confirm("¿Desea cambiar el punto de acceso registrado?")) {
+        localStorage.removeItem('portal_seleccionado');
+        location.reload();
+    }
+}
+
+// --- FUNCIONES DE APOYO (FORMATO Y VALIDACIÓN) ---
+function formatearRUT(rut) {
+    let valor = rut.replace(/\./g, '').replace(/-/g, '').trim();
+    if (valor.length < 2) return valor;
+    let cuerpo = valor.slice(0, -1);
+    let dv = valor.slice(-1).toUpperCase(); 
+    return cuerpo + "-" + dv;
+}
+
+function validarRUT(rut) {
+    let valor = rut.replace(/\./g, '').replace(/-/g, '').toUpperCase();
+    if (valor.length < 8) return false;
+    let cuerpo = valor.slice(0, -1);
+    let dv = valor.slice(-1);
+    let suma = 0, multiplo = 2;
+    for (let i = 1; i <= cuerpo.length; i++) {
+        suma += multiplo * valor.charAt(cuerpo.length - i);
+        multiplo = (multiplo < 7) ? multiplo + 1 : 2;
+    }
+    let dvEsperado = 11 - (suma % 11);
+    dv = (dv == 'K') ? 10 : dv;
+    dv = (dv == 0) ? 11 : dv;
+    return dvEsperado == dv;
+}
+
+function revisarValidezRUT(valor) {
+    const input = document.getElementById('run');
+    if (valor.length > 8) {
+        input.classList.toggle("is-invalid", !validarRUT(valor));
+    }
+}
+
+function toggleVehiculo() {
+    const tipo = document.getElementById('tipoEntrada').value;
+    document.getElementById('campoPatente').style.display = (tipo === 'vehicular') ? 'block' : 'none';
+}
+
+function verificarMotivoEspecial() {
+    const motivo = document.getElementById('motivo').value;
+    const contenedor = document.getElementById('contenedorExtra');
+    const label = document.getElementById('labelExtra');
+    const input = document.getElementById('detalleVisita');
+
+    if (motivo === "VISITA-PROVEEDORES") {
+        contenedor.style.display = "block";
+        label.innerText = "Nombre de la Empresa/Proveedor";
+    } else if (motivo === "VISITA-ARRIENDOS") {
+        contenedor.style.display = "block";
+        label.innerText = "Nombre de la Organización/Arrendatario";
+    } else {
+        contenedor.style.display = "none";
+        input.value = "";
+    }
+}
+
+// --- LÓGICA DE ESCANEO ---
+
+
+function encenderCamara() {
+    const readerDiv = document.getElementById('reader');
+    const btnIniciar = document.getElementById('btnIniciarCamara');
+    const btnDetener = document.getElementById('btnDetenerCamara');
+
+    readerDiv.style.display = 'block';
+    btnIniciar.style.display = 'none';
+    btnDetener.style.display = 'block';
+
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 300 }, (decodedText) => {
+        procesarDatosChile(decodedText);
+        apagarCamara(); // Se apaga automáticamente al leer con éxito
+    }).catch(err => {
+        alert("Error Cámara: " + err);
+        apagarCamara();
+    });
+}
+
+function apagarCamara() {
+    const readerDiv = document.getElementById('reader');
+    const btnIniciar = document.getElementById('btnIniciarCamara');
+    const btnDetener = document.getElementById('btnDetenerCamara');
+
+    if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+            html5QrCode.clear();
+            readerDiv.style.display = 'none';
+            btnIniciar.style.display = 'block';
+            btnDetener.style.display = 'none';
+        }).catch(err => {
+            console.log("Error al detener cámara:", err);
+            readerDiv.style.display = 'none';
+            btnIniciar.style.display = 'block';
+            btnDetener.style.display = 'none';
+        });
+    } else {
+        readerDiv.style.display = 'none';
+        btnIniciar.style.display = 'block';
+        btnDetener.style.display = 'none';
+    }
+}
+
+function manejarEscaneoPistola(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        procesarDatosChile(event.target.value);
+        event.target.value = '';
+    }
+}
+
+function procesarDatosChile(data) {
+    let dataCorregida = data.replace(/\]/g, '|').replace(/'/g, '-').trim();
+
+    // LÓGICA PASE INVITADO
+    if (dataCorregida.toUpperCase().includes("PASE")) {
+        const partes = dataCorregida.split('|');
+        if (partes.length >= 8) {
+            const timestampGeneracion = parseInt(partes[7]);
+            const diferenciaMinutos = (Date.now() - timestampGeneracion) / (1000 * 60);
+            const horaLeible = new Date(timestampGeneracion).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            if (diferenciaMinutos > 60) {
+                alert("❌ PASE VENCIDO\nExpiró hace " + Math.round(diferenciaMinutos - 60) + " minutos.\nGenerado a las: " + horaLeible);
+                return;
+            }
+
+            let rutInvitado = partes[1].replace(/\./g, '');
+            if (!rutInvitado.includes('-')) rutInvitado = rutInvitado.slice(0, -1) + "-" + rutInvitado.slice(-1);
+
+            document.getElementById('run').value = rutInvitado.toUpperCase();
+            document.getElementById('nombreCompleto').value = partes[2] || "";
+            document.getElementById('tipoEntrada').value = partes[3] || "peatonal";
+            
+            const selectMotivo = document.getElementById('motivo');
+            const motivoQR = partes[5] || "";
+            if (!Array.from(selectMotivo.options).some(opt => opt.value === motivoQR)) {
+                selectMotivo.add(new Option(motivoQR, motivoQR));
+            }
+            selectMotivo.value = motivoQR;
+
+            toggleVehiculo();
+            verificarMotivoEspecial();
+            if (partes[3] === 'vehicular') document.getElementById('patente').value = partes[4] || "";
+            if (partes[6] && partes[6] !== "SD") document.getElementById('detalleVisita').value = partes[6];
+
+            alert("✅ PASE VÁLIDO\nGenerado a las: " + horaLeible);
+            return;
+        }
+    }
+
+    // CARNET FÍSICO
+    if (dataCorregida.split('|').length > 10) {
+        const partes = dataCorregida.split('|');
+        let runRaw = partes[0].replace(/^0+/, '');
+        let runFinal = (!runRaw.includes('-')) ? runRaw.slice(0, -1) + "-" + runRaw.slice(-1) : runRaw;
+        document.getElementById('run').value = formatearRUT(runFinal);
+        document.getElementById('nombreCompleto').value = `${partes[3]} ${partes[1]} ${partes[2]}`;
+    }
+}
+
+// --- ENVÍO FINAL ---
+document.getElementById('registroForm').onsubmit = async function(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    
+    if (!validarRUT(document.getElementById('run').value)) return alert("RUT Inválido");
+
+    const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwHDSIRPrSK6naE_cjSnNNWs_jT95IIWz3KcE_jEsF-HU-WFZhh1r0Z7jXpoL1ubv5N5w/exec";
+
+    const datos = {
+        run: document.getElementById('run').value,
+        nombre: document.getElementById('nombreCompleto').value,
+        tipo: document.getElementById('tipoEntrada').value,
+        patente: document.getElementById('patente').value || "N/A",
+        motivo: document.getElementById('motivo').value,
+        detalle: document.getElementById('detalleVisita').value || "N/A",
+        portal: portalActual // <--- NUEVO CAMPO ENVIADO
+    };
+
+    try {
+        btn.disabled = true;
+        btn.innerText = "Guardando...";
+        await fetch(URL_SCRIPT, { method: 'POST', mode: 'no-cors', body: JSON.stringify(datos) });
+        
+        alert("✅ Registro Guardado en: " + portalActual);
+        this.reset();
+        toggleVehiculo();
+        verificarMotivoEspecial();
+    } catch (error) {
+        alert("❌ Error de conexión");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Finalizar Registro";
+    }
+};
+</script>
+</body>
+</html>
